@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { PALETTE, foregroundFor, isHex, mix, nameOf } from './palette';
+import { PanelApi, refreshPanel, showPanel } from './panel';
 
 const REGISTRY_KEY = 'projectColors.registry';
+const NAMES_KEY = 'projectColors.names';
 // Registry value for a project the user explicitly un-colored, so it isn't re-assigned on next open.
 const NONE = 'none';
 
@@ -37,10 +39,11 @@ let writeQueue = Promise.resolve();
 export function activate(ctx: vscode.ExtensionContext) {
   context = ctx;
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, -1000);
-  statusItem.command = 'projectColors.change';
+  statusItem.command = 'projectColors.open';
 
   ctx.subscriptions.push(
     statusItem,
+    vscode.commands.registerCommand('projectColors.open', () => showPanel(panelApi)),
     vscode.commands.registerCommand('projectColors.change', changeColor),
     vscode.commands.registerCommand('projectColors.next', nextColor),
     vscode.commands.registerCommand('projectColors.reset', reset),
@@ -106,11 +109,20 @@ function pickNewColor(key: string, reg: Registry): string {
 }
 
 async function applyCurrent() {
+  try {
+    await applyCurrentInner();
+  } finally {
+    refreshPanel(panelApi);
+  }
+}
+
+async function applyCurrentInner() {
   const key = projectKey();
   if (!key) {
     statusItem.hide();
     return;
   }
+  await rememberName(key);
   let hex = registry()[key];
   if (!hex) {
     hex = pickNewColor(key, registry());
@@ -205,7 +217,7 @@ function updateStatusItem(hex: string) {
     return;
   }
   statusItem.text = `$(symbol-color) ${nameOf(hex)}`;
-  statusItem.tooltip = `Project Colors: ${nameOf(hex)} (${hex})\n클릭해서 색 변경`;
+  statusItem.tooltip = `Project Colors: ${nameOf(hex)} (${hex})\n클릭해서 색 선택 패널 열기`;
   statusItem.show();
 }
 
@@ -312,3 +324,69 @@ async function reset() {
     'Project Colors: 색을 제거했습니다. 다시 칠하려면 "Project Colors: 색 변경"을 실행하세요.',
   );
 }
+
+function projectName(): string {
+  const file = vscode.workspace.workspaceFile;
+  if (file && file.scheme !== 'untitled') {
+    return file.path.split('/').pop()!.replace(/.code-workspace$/, '');
+  }
+  return vscode.workspace.workspaceFolders?.[0]?.name ?? '';
+}
+
+/** Keys are lower-cased on Windows/macOS, so keep the original folder name for display. */
+async function rememberName(key: string) {
+  const names = context.globalState.get<Record<string, string>>(NAMES_KEY, {});
+  const name = projectName();
+  if (names[key] !== name) {
+    await context.globalState.update(NAMES_KEY, { ...names, [key]: name });
+  }
+}
+
+const panelApi: PanelApi = {
+  getState() {
+    const key = projectKey();
+    if (!key) {
+      return undefined;
+    }
+    const names = context.globalState.get<Record<string, string>>(NAMES_KEY, {});
+    const reg = registry();
+    const current = reg[key];
+    return {
+      projectName: projectName(),
+      current: current && current !== NONE ? current : undefined,
+      elements: vscode.workspace.getConfiguration('projectColors').get<string[]>('elements', []),
+      others: Object.entries(reg)
+        .filter(([k, hex]) => k !== key && hex !== NONE)
+        .map(([k, hex]) => ({ name: names[k] ?? decodeURIComponent(k.split('/').pop() ?? k), hex }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  },
+  preview(hex) {
+    if (isHex(hex)) {
+      writeColors(hex.toLowerCase());
+    }
+  },
+  endPreview() {
+    applyCurrent();
+  },
+  async apply(hex) {
+    const key = projectKey();
+    if (key && isHex(hex)) {
+      await saveColor(key, hex.toLowerCase());
+      await applyCurrent();
+    }
+  },
+  async setElements(elements) {
+    // onDidChangeConfiguration re-applies the colors.
+    await vscode.workspace
+      .getConfiguration('projectColors')
+      .update('elements', elements, vscode.ConfigurationTarget.Global);
+  },
+  async reset() {
+    const key = projectKey();
+    if (key) {
+      await saveColor(key, NONE);
+      await applyCurrent();
+    }
+  },
+};

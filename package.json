@@ -2,26 +2,64 @@
   "name": "project-colors",
   "displayName": "Project Colors",
   "description": "프로젝트(열린 경로)마다 고유한 색을 자동 배정해 타이틀바·액티비티바·상태바·활성 탭을 칠합니다.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "local",
   "license": "MIT",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Themes", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Themes",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "projectColors.change", "title": "색 변경", "category": "Project Colors" },
-      { "command": "projectColors.next", "title": "다음 색으로", "category": "Project Colors" },
-      { "command": "projectColors.reset", "title": "이 프로젝트 색 제거", "category": "Project Colors" }
+      {
+        "command": "projectColors.open",
+        "title": "색 선택 패널 열기",
+        "category": "Project Colors",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "projectColors.change",
+        "title": "색 빠르게 고르기",
+        "category": "Project Colors"
+      },
+      {
+        "command": "projectColors.next",
+        "title": "다음 색으로",
+        "category": "Project Colors"
+      },
+      {
+        "command": "projectColors.reset",
+        "title": "이 프로젝트 색 제거",
+        "category": "Project Colors"
+      }
     ],
     "configuration": {
       "title": "Project Colors",
       "properties": {
         "projectColors.elements": {
           "type": "array",
-          "items": { "type": "string", "enum": ["titleBar", "activityBar", "statusBar", "activeTab"] },
-          "default": ["titleBar", "activityBar", "statusBar", "activeTab"],
+          "items": {
+            "type": "string",
+            "enum": [
+              "titleBar",
+              "activityBar",
+              "statusBar",
+              "activeTab"
+            ]
+          },
+          "default": [
+            "titleBar",
+            "activityBar",
+            "statusBar",
+            "activeTab"
+          ],
           "description": "색을 칠할 영역"
         },
         "projectColors.showStatusBarItem": {
