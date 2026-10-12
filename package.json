@@ -2,12 +2,16 @@
   "name": "project-colors",
   "displayName": "Project Colors",
   "description": "Gives every project (open path) its own color on the title bar, activity bar, status bar and active tab.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "local",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
   "categories": [
     "Themes",
     "Other"
