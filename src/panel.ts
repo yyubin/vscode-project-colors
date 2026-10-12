@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { PALETTE } from './palette';
+import { GROUPS, PALETTE } from './palette';
 
 export interface PanelState {
   projectName: string;
@@ -19,10 +19,10 @@ export interface PanelApi {
 }
 
 const ELEMENTS: [string, string][] = [
-  ['titleBar', '타이틀바'],
-  ['activityBar', '액티비티바'],
-  ['statusBar', '상태바'],
-  ['activeTab', '활성 탭'],
+  ['titleBar', 'Title bar'],
+  ['activityBar', 'Activity bar'],
+  ['statusBar', 'Status bar'],
+  ['activeTab', 'Active tab'],
 ];
 
 let panel: vscode.WebviewPanel | undefined;
@@ -75,7 +75,7 @@ function html(webview: vscode.Webview): string {
   const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
   const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   return /* html */ `<!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -145,28 +145,28 @@ function html(webview: vscode.Webview): string {
     </div>
   </header>
 
-  <h2>팔레트</h2>
-  <div class="grid" id="grid"></div>
+  <div id="groups"></div>
 
-  <h2>직접 고르기</h2>
+  <h2>Custom</h2>
   <div class="custom">
-    <input type="color" id="picker" aria-label="색 선택">
+    <input type="color" id="picker" aria-label="Pick a color">
     <input type="text" id="hexInput" maxlength="7" spellcheck="false" aria-label="HEX">
-    <button class="primary" id="applyCustom">적용</button>
+    <button class="primary" id="applyCustom">Apply</button>
   </div>
 
-  <h2>칠할 영역</h2>
+  <h2>Areas</h2>
   <div class="toggles" id="toggles"></div>
 
-  <h2>다른 프로젝트</h2>
+  <h2>Other projects</h2>
   <ul id="others"></ul>
 
-  <footer><button class="link" id="reset">이 프로젝트 색 제거</button></footer>
+  <footer><button class="link" id="reset">Remove color from this project</button></footer>
 </main>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const PALETTE = ${JSON.stringify(PALETTE)};
   const ELEMENTS = ${JSON.stringify(ELEMENTS)};
+  const GROUPS = ${JSON.stringify(GROUPS)};
   const $ = (id) => document.getElementById(id);
   const isHex = (v) => /^#[0-9a-f]{6}$/i.test(v);
   let state;
@@ -181,8 +181,15 @@ function html(webview: vscode.Webview): string {
     vscode.postMessage({ type: 'endPreview' });
   }
 
-  const grid = $('grid');
-  for (const s of PALETTE) {
+  const swatches = [];
+  for (const g of GROUPS) {
+    const heading = document.createElement('h2');
+    heading.textContent = g;
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    grid.addEventListener('mouseleave', endPreview);
+    $('groups').append(heading, grid);
+    for (const s of PALETTE.filter((p) => p.group === g)) {
     const b = document.createElement('button');
     b.className = 'swatch';
     b.dataset.hex = s.hex;
@@ -192,8 +199,9 @@ function html(webview: vscode.Webview): string {
     b.addEventListener('mouseenter', () => schedulePreview(s.hex));
     b.addEventListener('click', () => { clearTimeout(previewTimer); vscode.postMessage({ type: 'apply', hex: s.hex }); });
     grid.appendChild(b);
+    swatches.push(b);
+    }
   }
-  grid.addEventListener('mouseleave', endPreview);
 
   const picker = $('picker'), hexInput = $('hexInput');
   picker.addEventListener('input', () => { hexInput.value = picker.value; schedulePreview(picker.value); });
@@ -225,20 +233,20 @@ function html(webview: vscode.Webview): string {
 
   function render() {
     if (!state) {
-      $('project').textContent = '열린 폴더가 없습니다';
+      $('project').textContent = 'No folder is open';
       return;
     }
     const cur = state.current;
     const sw = PALETTE.find((s) => s.hex === cur);
     $('project').textContent = state.projectName;
-    $('currentLabel').textContent = cur ? (sw ? sw.name + ' · ' + cur : '직접 지정 · ' + cur) : '색 없음';
+    $('currentLabel').textContent = cur ? (sw ? sw.name + ' · ' + cur : 'Custom · ' + cur) : 'No color';
     $('chip').className = 'chip' + (cur ? '' : ' none');
     $('chip').style.background = cur || '';
     if (cur && document.activeElement !== hexInput) { picker.value = cur; hexInput.value = cur; }
 
     const counts = {};
     for (const o of state.others) counts[o.hex] = (counts[o.hex] || 0) + 1;
-    for (const b of grid.children) {
+    for (const b of swatches) {
       b.classList.toggle('current', b.dataset.hex === cur);
       b.querySelector('.used')?.remove();
       const n = counts[b.dataset.hex];
@@ -246,7 +254,7 @@ function html(webview: vscode.Webview): string {
         const u = document.createElement('span');
         u.className = 'used';
         u.textContent = n;
-        u.title = '다른 프로젝트 ' + n + '개에서 사용 중';
+        u.title = 'Used by ' + n + ' other project(s)';
         b.querySelector('.fill').appendChild(u);
       }
     }
@@ -254,7 +262,7 @@ function html(webview: vscode.Webview): string {
 
     const ul = $('others');
     ul.innerHTML = '';
-    if (!state.others.length) ul.innerHTML = '<li class="empty">아직 없습니다</li>';
+    if (!state.others.length) ul.innerHTML = '<li class="empty">None yet</li>';
     for (const o of state.others) {
       const li = document.createElement('li');
       li.innerHTML = '<span class="dot"></span><span class="name"></span>';

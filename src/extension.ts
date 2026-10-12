@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { PALETTE, foregroundFor, isHex, mix, nameOf } from './palette';
+import { GROUPS, PALETTE, foregroundFor, isHex, mix, nameOf } from './palette';
 import { PanelApi, refreshPanel, showPanel } from './panel';
 
 const REGISTRY_KEY = 'projectColors.registry';
@@ -89,7 +89,7 @@ function hash(text: string): number {
   return h >>> 0;
 }
 
-/** Least-used palette color, so different projects stay distinct until the palette runs out. */
+/** Least-used palette color (pastels win ties), so projects stay distinct until the palette runs out. */
 function pickNewColor(key: string, reg: Registry): string {
   const usage = new Map(PALETTE.map((s) => [s.hex, 0]));
   for (const [k, hex] of Object.entries(reg)) {
@@ -97,15 +97,11 @@ function pickNewColor(key: string, reg: Registry): string {
       usage.set(hex, usage.get(hex)! + 1);
     }
   }
-  const start = hash(key) % PALETTE.length;
-  let best = PALETTE[start].hex;
-  for (let i = 0; i < PALETTE.length; i++) {
-    const hex = PALETTE[(start + i) % PALETTE.length].hex;
-    if (usage.get(hex)! < usage.get(best)!) {
-      best = hex;
-    }
-  }
-  return best;
+  const min = Math.min(...usage.values());
+  const candidates = PALETTE.filter((s) => usage.get(s.hex) === min);
+  const pastels = candidates.filter((s) => s.group === 'Pastel');
+  const pool = pastels.length ? pastels : candidates;
+  return pool[hash(key) % pool.length].hex;
 }
 
 async function applyCurrent() {
@@ -183,7 +179,7 @@ function buildColors(hex: string): Record<string, string> {
 /** Serialized so rapid QuickPick previews can't land out of order. */
 function writeColors(hex: string | undefined): Promise<void> {
   writeQueue = writeQueue.then(() => doWriteColors(hex)).catch((e) => {
-    vscode.window.showErrorMessage(`Project Colors: 설정 저장 실패 - ${e}`);
+    vscode.window.showErrorMessage(`Project Colors: failed to save settings - ${e}`);
   });
   return writeQueue;
 }
@@ -217,7 +213,7 @@ function updateStatusItem(hex: string) {
     return;
   }
   statusItem.text = `$(symbol-color) ${nameOf(hex)}`;
-  statusItem.tooltip = `Project Colors: ${nameOf(hex)} (${hex})\n클릭해서 색 선택 패널 열기`;
+  statusItem.tooltip = `Project Colors: ${nameOf(hex)} (${hex})\nClick to open the color picker`;
   statusItem.show();
 }
 
@@ -243,30 +239,34 @@ interface ColorItem extends vscode.QuickPickItem {
 async function changeColor() {
   const key = projectKey();
   if (!key) {
-    vscode.window.showWarningMessage('Project Colors: 열린 폴더가 없습니다.');
+    vscode.window.showWarningMessage('Project Colors: no folder is open.');
     return;
   }
   const original = registry()[key];
   const reg = registry();
   const usedBy = (hex: string) => Object.entries(reg).filter(([k, v]) => k !== key && v === hex).length;
 
-  const items: ColorItem[] = await Promise.all(
+  const swatches: ColorItem[] = await Promise.all(
     PALETTE.map(async (s) => ({
       label: s.name,
-      description: s.hex === original ? '현재' : s.hex,
-      detail: usedBy(s.hex) ? `다른 프로젝트 ${usedBy(s.hex)}개에서 사용 중` : undefined,
+      description: s.hex === original ? 'current' : s.hex,
+      detail: usedBy(s.hex) ? `Used by ${usedBy(s.hex)} other project(s)` : undefined,
       iconPath: await swatchIcon(s.hex),
       hex: s.hex,
     })),
   );
+  const items: ColorItem[] = GROUPS.flatMap((g) => [
+    { label: g, kind: vscode.QuickPickItemKind.Separator },
+    ...swatches.filter((_, i) => PALETTE[i].group === g),
+  ]);
   items.push(
     { label: '', kind: vscode.QuickPickItemKind.Separator },
-    { label: '$(edit) HEX 직접 입력...', custom: true },
+    { label: '$(edit) Enter HEX...', custom: true },
   );
 
   const pick = vscode.window.createQuickPick<ColorItem>();
-  pick.title = 'Project Colors: 이 프로젝트의 색';
-  pick.placeholder = '방향키로 미리보기, Enter로 확정, Esc로 취소';
+  pick.title = 'Project Colors: color for this project';
+  pick.placeholder = 'Arrow keys to preview, Enter to apply, Esc to cancel';
   pick.items = items;
   pick.activeItems = items.filter((i) => i.hex === original);
 
@@ -283,9 +283,9 @@ async function changeColor() {
     let hex = item?.hex;
     if (item?.custom) {
       const input = await vscode.window.showInputBox({
-        prompt: 'HEX 색상 (예: #2f6f8f)',
+        prompt: 'HEX color (e.g. #2f6f8f)',
         value: original,
-        validateInput: (v) => (isHex(v.trim()) ? undefined : '#RRGGBB 형식으로 입력하세요'),
+        validateInput: (v) => (isHex(v.trim()) ? undefined : 'Use the #RRGGBB format'),
       });
       hex = input?.trim().toLowerCase();
     }
@@ -321,7 +321,7 @@ async function reset() {
   await saveColor(key, NONE);
   await applyCurrent();
   vscode.window.showInformationMessage(
-    'Project Colors: 색을 제거했습니다. 다시 칠하려면 "Project Colors: 색 변경"을 실행하세요.',
+    'Project Colors: color removed. Run "Project Colors: Open Color Picker" to color it again.',
   );
 }
 
