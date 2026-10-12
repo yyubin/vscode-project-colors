@@ -2,7 +2,7 @@
   "name": "project-colors",
   "displayName": "Project Colors",
   "description": "Gives every project (open path) its own color on the title bar, activity bar, status bar and active tab.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -13,7 +13,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "*"
   ],
   "main": "./out/extension.js",
   "contributes": {

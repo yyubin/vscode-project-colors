@@ -55,6 +55,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     }),
   );
 
+  updateStatusItem(undefined);
   applyCurrent();
 }
 
@@ -115,7 +116,7 @@ async function applyCurrent() {
 async function applyCurrentInner() {
   const key = projectKey();
   if (!key) {
-    statusItem.hide();
+    updateStatusItem(undefined);
     return;
   }
   await rememberName(key);
@@ -126,7 +127,7 @@ async function applyCurrentInner() {
   }
   if (hex === NONE) {
     await writeColors(undefined);
-    statusItem.hide();
+    updateStatusItem(undefined);
     return;
   }
   await writeColors(hex);
@@ -207,13 +208,21 @@ async function doWriteColors(hex: string | undefined) {
   );
 }
 
-function updateStatusItem(hex: string) {
+/** Always visible (unless disabled), so the picker is reachable even before a color is set. */
+function updateStatusItem(hex: string | undefined) {
   if (!vscode.workspace.getConfiguration('projectColors').get('showStatusBarItem', true)) {
     statusItem.hide();
     return;
   }
-  statusItem.text = `$(symbol-color) ${nameOf(hex)}`;
-  statusItem.tooltip = `Project Colors: ${nameOf(hex)} (${hex})\nClick to open the color picker`;
+  if (hex) {
+    statusItem.text = `$(symbol-color) ${nameOf(hex)}`;
+    statusItem.tooltip = `Project Colors: ${nameOf(hex)} (${hex})\nClick to open the color picker`;
+  } else {
+    statusItem.text = '$(symbol-color) No color';
+    statusItem.tooltip = projectKey()
+      ? 'Project Colors: no color set\nClick to open the color picker'
+      : 'Project Colors: open a folder to assign a color';
+  }
   statusItem.show();
 }
 
