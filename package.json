@@ -1,0 +1,46 @@
+{
+  "name": "project-colors",
+  "displayName": "Project Colors",
+  "description": "프로젝트(열린 경로)마다 고유한 색을 자동 배정해 타이틀바·액티비티바·상태바·활성 탭을 칠합니다.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Themes", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "projectColors.change", "title": "색 변경", "category": "Project Colors" },
+      { "command": "projectColors.next", "title": "다음 색으로", "category": "Project Colors" },
+      { "command": "projectColors.reset", "title": "이 프로젝트 색 제거", "category": "Project Colors" }
+    ],
+    "configuration": {
+      "title": "Project Colors",
+      "properties": {
+        "projectColors.elements": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["titleBar", "activityBar", "statusBar", "activeTab"] },
+          "default": ["titleBar", "activityBar", "statusBar", "activeTab"],
+          "description": "색을 칠할 영역"
+        },
+        "projectColors.showStatusBarItem": {
+          "type": "boolean",
+          "default": true,
+          "description": "상태바에 현재 색 이름을 표시하고, 클릭하면 색을 바꿉니다."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package --skip-license --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.4.0"
+  }
+}
