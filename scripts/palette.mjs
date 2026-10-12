@@ -1,8 +1,15 @@
-// Generates and validates the palette: fixed OKLCH lightness/chroma, evenly spaced hues.
+// Generates and validates the palette: per group, fixed OKLCH lightness/chroma with evenly spaced hues.
 // Run: node scripts/palette.mjs
-const L = 0.5, C = 0.11;
-const names = ['Crimson', 'Amber', 'Olive', 'Forest', 'Teal', 'Ocean', 'Cobalt', 'Indigo', 'Violet', 'Berry'];
-const HUES = names.map((_, i) => 25 + i * 36);
+const GROUPS = [
+  {
+    group: 'Deep', L: 0.5, C: 0.11, text: [1, 1, 1],
+    names: ['Crimson', 'Amber', 'Olive', 'Forest', 'Teal', 'Ocean', 'Cobalt', 'Indigo', 'Violet', 'Berry'],
+  },
+  {
+    group: 'Pastel', L: 0.86, C: 0.075, text: [0x1e / 255, 0x1e / 255, 0x1e / 255],
+    names: ['Blush', 'Peach', 'Butter', 'Pistachio', 'Mint', 'Aqua', 'Sky', 'Periwinkle', 'Lavender', 'Orchid'],
+  },
+];
 
 function oklchToRgb(l, c, h) {
   const a = c * Math.cos((h * Math.PI) / 180), b = c * Math.sin((h * Math.PI) / 180);
@@ -19,13 +26,27 @@ function oklchToRgb(l, c, h) {
   return { srgb, lin: lin.map((v) => Math.min(1, Math.max(0, v))), inGamut, lab: [l, a, b] };
 }
 const hex = (rgb) => '#' + rgb.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+const toLin = (v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 const lum = (lin) => 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+const contrast = (y1, y2) => (Math.max(y1, y2) + 0.05) / (Math.min(y1, y2) + 0.05);
 
-const out = HUES.map((h, i) => { let c = C, r = oklchToRgb(L, c, h); while (!r.inGamut) r = oklchToRgb(L, (c -= 0.002), h); return { name: names[i], h, hex: hex(r.srgb), inGamut: r.inGamut, contrast: 1.05 / (lum(r.lin) + 0.05), lab: r.lab }; });
-for (const p of out) console.log(p.name.padEnd(8), p.hex, 'gamut', p.inGamut, 'white contrast', p.contrast.toFixed(2));
-let min = Infinity, pair;
-for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
-  const d = Math.hypot(...out[i].lab.map((v, k) => v - out[j].lab[k]));
-  if (d < min) { min = d; pair = [out[i].name, out[j].name]; }
+const all = [];
+for (const g of GROUPS) {
+  const textLum = lum(g.text.map(toLin));
+  console.log(`\n${g.group} (L=${g.L}, C<=${g.C})`);
+  const out = g.names.map((name, i) => {
+    const h = 25 + i * 36;
+    let c = g.C, r = oklchToRgb(g.L, c, h);
+    while (!r.inGamut) r = oklchToRgb(g.L, (c -= 0.002), h);
+    return { name, group: g.group, hex: hex(r.srgb), c, contrast: contrast(lum(r.lin), textLum), lab: r.lab };
+  });
+  for (const p of out) console.log(' ', p.name.padEnd(10), p.hex, 'C', p.c.toFixed(3), 'text contrast', p.contrast.toFixed(2));
+  let min = Infinity, pair;
+  for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+    const d = Math.hypot(...out[i].lab.map((v, k) => v - out[j].lab[k]));
+    if (d < min) { min = d; pair = [out[i].name, out[j].name]; }
+  }
+  console.log('  min pairwise dE(OK):', min.toFixed(3), pair);
+  all.push(...out);
 }
-console.log('min pairwise dE(OK):', min.toFixed(3), pair);
+console.log('\n' + all.map((p) => `  { name: '${p.name}', hex: '${p.hex}', group: '${p.group}' },`).join('\n'));
